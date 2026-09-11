@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Heaven — Painel de indicadores</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<style>
+  :root{
+    --bg: #0F1417;
+    --panel: #161C20;
+    --panel-2: #1B2226;
+    --border: #2A3338;
+    --text: #E7ECEE;
+    --text-dim: #8A969C;
+    --text-faint: #5C6A70;
+    --accent: #4FD1C5;
+    --good: #B4E33D;
+    --bad: #FF6B5B;
+    --radius: 3px;
+    --font-ui: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  }
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--font-ui);
+    line-height:1.5;
+    min-height:100vh;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:0.001ms !important; transition-duration:0.001ms !important;}
+  }
+
+  .wrap{
+    max-width:1180px;
+    margin:0 auto;
+    padding:32px 24px 64px;
+  }
+
+  header{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    flex-wrap:wrap;
+    gap:16px;
+    border-bottom:1px solid var(--border);
+    padding-bottom:20px;
+    margin-bottom:28px;
+  }
+  header .brand{
+    font-size:13px;
+    color:var(--accent);
+    font-weight:600;
+    letter-spacing:0.02em;
+    margin-bottom:6px;
+  }
+  header h1{
+    font-size:26px;
+    font-weight:600;
+    margin:0;
+    letter-spacing:-0.01em;
+  }
+  header p{
+    margin:6px 0 0;
+    color:var(--text-dim);
+    font-size:14px;
+    max-width:480px;
+  }
+
+  .import-zone{
+    display:flex;
+    align-items:center;
+    gap:12px;
+  }
+  .btn{
+    background:var(--panel-2);
+    border:1px solid var(--border);
+    color:var(--text);
+    font-family:var(--font-ui);
+    font-size:14px;
+    font-weight:500;
+    padding:10px 16px;
+    border-radius:var(--radius);
+    cursor:pointer;
+    transition:border-color 120ms ease, color 120ms ease;
+  }
+  .btn:hover{ border-color:var(--accent); color:var(--accent); }
+  .btn:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+  .btn.primary{
+    background:var(--accent);
+    color:#0B1113;
+    border-color:var(--accent);
+  }
+  .btn.primary:hover{ background:#6BE0D5; color:#0B1113; }
+  #fileInput{ display:none; }
+  .file-name{
+    font-size:13px;
+    color:var(--text-dim);
+    font-family:var(--font-mono);
+  }
+
+  /* Empty state */
+  .empty{
+    border:1px dashed var(--border);
+    border-radius:var(--radius);
+    padding:64px 24px;
+    text-align:center;
+    color:var(--text-dim);
+  }
+  .empty h2{ color:var(--text); font-size:18px; font-weight:600; margin:0 0 8px; }
+  .empty p{ margin:0 0 20px; font-size:14px; }
+  .empty .hint{
+    margin-top:24px;
+    font-size:12px;
+    color:var(--text-faint);
+    font-family:var(--font-mono);
+  }
+
+  /* Config bar */
+  .config{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(180px,1fr));
+    gap:16px;
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:18px 20px;
+    margin-bottom:24px;
+  }
+  .config label{
+    display:block;
+    font-size:12px;
+    color:var(--text-dim);
+    margin-bottom:6px;
+  }
+  .config select, .config input[type=text]{
+    width:100%;
+    background:var(--panel-2);
+    border:1px solid var(--border);
+    color:var(--text);
+    font-family:var(--font-ui);
+    font-size:13px;
+    padding:8px 10px;
+    border-radius:var(--radius);
+  }
+  .config select:focus-visible, .config input:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }
+  .metric-checks{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px 14px;
+  }
+  .metric-checks label{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    font-size:13px;
+    color:var(--text);
+    margin:0;
+  }
+
+  /* KPI strip */
+  .kpis{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(180px,1fr));
+    gap:1px;
+    background:var(--border);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    overflow:hidden;
+    margin-bottom:28px;
+  }
+  .kpi{
+    background:var(--panel);
+    padding:18px 20px;
+  }
+  .kpi .label{ font-size:12px; color:var(--text-dim); margin-bottom:8px; }
+  .kpi .value{ font-family:var(--font-mono); font-size:26px; font-weight:600; letter-spacing:-0.02em; }
+  .kpi .sub{ font-size:12px; color:var(--text-faint); margin-top:4px; }
+  .kpi .value.good{ color:var(--good); }
+  .kpi .value.bad{ color:var(--bad); }
+
+  /* Main grid */
+  .main-grid{
+    display:grid;
+    grid-template-columns:1.3fr 1fr;
+    gap:20px;
+  }
+  @media (max-width: 860px){ .main-grid{ grid-template-columns:1fr; } }
+
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+  }
+  .panel-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:12px;
+    padding:16px 20px;
+    border-bottom:1px solid var(--border);
+    flex-wrap:wrap;
+  }
+  .panel-head h3{ margin:0; font-size:14px; font-weight:600; }
+  .panel-body{ padding:16px 20px; }
+
+  .search-box{
+    background:var(--panel-2);
+    border:1px solid var(--border);
+    color:var(--text);
+    font-family:var(--font-ui);
+    font-size:13px;
+    padding:7px 10px;
+    border-radius:var(--radius);
+    min-width:160px;
+  }
+  .search-box:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }
+
+  table{ width:100%; border-collapse:collapse; font-size:13px; }
+  thead th{
+    text-align:left;
+    color:var(--text-dim);
+    font-weight:500;
+    font-size:12px;
+    padding:8px 10px;
+    border-bottom:1px solid var(--border);
+    cursor:pointer;
+    user-select:none;
+    white-space:nowrap;
+  }
+  thead th:hover{ color:var(--accent); }
+  thead th.active{ color:var(--accent); }
+  tbody td{
+    padding:9px 10px;
+    border-bottom:1px solid var(--panel-2);
+    font-family:var(--font-mono);
+    white-space:nowrap;
+  }
+  tbody td.name-cell{ font-family:var(--font-ui); font-weight:500; }
+  tbody tr:hover{ background:var(--panel-2); }
+  .table-scroll{ max-height:520px; overflow:auto; }
+  .badge{
+    display:inline-block;
+    padding:2px 7px;
+    border-radius:2px;
+    font-size:11px;
+    font-family:var(--font-ui);
+  }
+  .badge.good{ background:rgba(180,227,61,0.14); color:var(--good); }
+  .badge.bad{ background:rgba(255,107,91,0.14); color:var(--bad); }
+
+  select.metric-select{
+    background:var(--panel-2);
+    border:1px solid var(--border);
+    color:var(--text);
+    font-family:var(--font-ui);
+    font-size:13px;
+    padding:6px 10px;
+    border-radius:var(--radius);
+  }
+
+  canvas{ max-width:100%; }
+
+  footer{
+    margin-top:28px;
+    font-size:12px;
+    color:var(--text-faint);
+    text-align:center;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <div class="brand">Heaven</div>
+      <h1>Painel de indicadores da equipe</h1>
+      <p>Acompanhamento de produtividade e desempenho para supervisores. Importe a planilha do período para ver o painel atualizado.</p>
+    </div>
+    <div class="import-zone">
+      <span class="file-name" id="fileName"></span>
+      <button class="btn primary" id="btnImport">Importar planilha</button>
+      <input type="file" id="fileInput" accept=".csv,.xlsx,.xls">
+    </div>
+  </header>
+
+  <div id="emptyState" class="empty">
+    <h2>Nenhuma planilha carregada</h2>
+    <p>Importe um arquivo .csv ou .xlsx com os dados da equipe para gerar o painel.</p>
+    <button class="btn primary" id="btnImport2">Importar planilha</button>
+    <div class="hint">A primeira linha deve conter os títulos das colunas (ex.: Nome, Equipe, Meta, Realizado, Período)</div>
+  </div>
+
+  <div id="dashboard" style="display:none;">
+
+    <div class="config">
+      <div>
+        <label for="selName">Coluna de identificação (nome)</label>
+        <select id="selName"></select>
+      </div>
+      <div>
+        <label for="selGroup">Coluna de agrupamento (equipe) — opcional</label>
+        <select id="selGroup"></select>
+      </div>
+      <div>
+        <label for="selPeriod">Coluna de período (data/mês) — opcional</label>
+        <select id="selPeriod"></select>
+      </div>
+      <div style="grid-column: 1 / -1;">
+        <label>Indicadores numéricos a exibir</label>
+        <div class="metric-checks" id="metricChecks"></div>
+      </div>
+    </div>
+
+    <div class="kpis" id="kpiStrip"></div>
+
+    <div class="main-grid">
+      <div class="panel">
+        <div class="panel-head">
+          <h3>Colaboradores</h3>
+          <input class="search-box" id="searchBox" type="text" placeholder="Buscar por nome ou equipe">
+        </div>
+        <div class="panel-body" style="padding:0;">
+          <div class="table-scroll">
+            <table>
+              <thead><tr id="tableHead"></tr></thead>
+              <tbody id="tableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="panel" style="margin-bottom:20px;">
+          <div class="panel-head">
+            <h3>Ranking por indicador</h3>
+            <select class="metric-select" id="rankMetricSelect"></select>
+          </div>
+          <div class="panel-body">
+            <canvas id="rankChart" height="220"></canvas>
+          </div>
+        </div>
+
+        <div class="panel" id="trendPanel" style="display:none;">
+          <div class="panel-head">
+            <h3>Tendência ao longo do período</h3>
+          </div>
+          <div class="panel-body">
+            <canvas id="trendChart" height="200"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <footer>Painel somente leitura · os dados não são enviados a nenhum servidor, o processamento acontece no seu navegador</footer>
+</div>
+
+<script>
+(function(){
+  let rawRows = [];        // array of objects from parsed file
+  let columns = [];        // all column names
+  let numericCols = [];    // detected numeric columns
+  let textCols = [];       // detected text columns
+  let selectedMetrics = new Set();
+  let sortState = { col: null, dir: 1 };
+  let rankChart = null, trendChart = null;
+
+  const el = id => document.getElementById(id);
+
+  el('btnImport').addEventListener('click', () => el('fileInput').click());
+  el('btnImport2').addEventListener('click', () => el('fileInput').click());
+  el('fileInput').addEventListener('change', handleFile);
+
+  function handleFile(e){
+    const file = e.target.files[0];
+    if(!file) return;
+    el('fileName').textContent = file.name;
+    const ext = file.name.split('.').pop().toLowerCase();
+
+    if(ext === 'csv'){
+      Papa.parse(file, {
+        header:true,
+        dynamicTyping:true,
+        skipEmptyLines:true,
+        complete: res => onDataParsed(res.data)
+      });
+    } else {
+      const reader = new FileReader();
+      reader.onload = evt => {
+        const wb = XLSX.read(evt.target.result, {type:'array'});
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const data = XLSX.utils.sheet_to_json(sheet, {defval:null});
+        onDataParsed(data);
+      };
+      reader.readAsArrayBuffer(file);
+    }
+  }
+
+  function onDataParsed(rows){
+    rows = rows.filter(r => Object.values(r).some(v => v !== null && v !== ''));
+    if(rows.length === 0){
+      alert('Não foi possível encontrar dados nessa planilha.');
+      return;
+    }
+    rawRows = rows;
+    columns = Object.keys(rows[0]);
+    detectColumnTypes();
+    buildConfigUI();
+    selectedMetrics = new Set(numericCols.slice(0, 4));
+    renderAll();
+    el('emptyState').style.display = 'none';
+    el('dashboard').style.display = 'block';
+  }
+
+  function detectColumnTypes(){
+    numericCols = [];
+    textCols = [];
+    columns.forEach(col => {
+      const vals = rawRows.map(r => r[col]).filter(v => v !== null && v !== undefined && v !== '');
+      if(vals.length === 0) return;
+      const allNumeric = vals.every(v => typeof v === 'number' || (!isNaN(parseFloat(v)) && isFinite(v)));
+      if(allNumeric) numericCols.push(col);
+      else textCols.push(col);
+    });
+  }
+
+  function buildConfigUI(){
+    fillSelect('selName', textCols.length ? textCols : columns);
+    fillSelect('selGroup', ['(nenhuma)', ...textCols]);
+    fillSelect('selPeriod', ['(nenhuma)', ...columns]);
+    fillSelect('rankMetricSelect', numericCols);
+
+    const checksWrap = el('metricChecks');
+    checksWrap.innerHTML = '';
+    numericCols.forEach(col => {
+      const id = 'chk_' + col.replace(/\s+/g,'_');
+      const label = document.createElement('label');
+      label.innerHTML = `<input type="checkbox" id="${id}" ${selectedMetrics.has(col) || numericCols.indexOf(col) < 4 ? 'checked' : ''}> ${col}`;
+      checksWrap.appendChild(label);
+      label.querySelector('input').addEventListener('change', e => {
+        if(e.target.checked) selectedMetrics.add(col); else selectedMetrics.delete(col);
+        renderAll();
+      });
+    });
+
+    el('selName').addEventListener('change', renderAll);
+    el('selGroup').addEventListener('change', renderAll);
+    el('selPeriod').addEventListener('change', () => { renderAll(); });
+    el('rankMetricSelect').addEventListener('change', renderRankChart);
+    el('searchBox').addEventListener('input', renderTable);
+  }
+
+  function fillSelect(id, options){
+    const s = el(id);
+    s.innerHTML = '';
+    options.forEach(opt => {
+      const o = document.createElement('option');
+      o.value = opt; o.textContent = opt;
+      s.appendChild(o);
+    });
+  }
+
+  function getNameCol(){ return el('selName').value; }
+  function getGroupCol(){ const v = el('selGroup').value; return v === '(nenhuma)' ? null : v; }
+  function getPeriodCol(){ const v = el('selPeriod').value; return v === '(nenhuma)' ? null : v; }
+  function getMetrics(){ return numericCols.filter(c => selectedMetrics.has(c)); }
+
+  function renderAll(){
+    renderKPIs();
+    renderTable();
+    renderRankMetricOptions();
+    renderRankChart();
+    renderTrend();
+  }
+
+  function renderKPIs(){
+    const metrics = getMetrics();
+    const strip = el('kpiStrip');
+    strip.innerHTML = '';
+
+    addKPI('Colaboradores', rawRows.length, '');
+
+    if(metrics.length){
+      const primary = metrics[0];
+      const vals = rawRows.map(r => Number(r[primary])).filter(v => !isNaN(v));
+      const avg = vals.reduce((a,b) => a+b, 0) / (vals.length || 1);
+      addKPI('Média — ' + primary, formatNum(avg), '');
+
+      let best = null;
+      rawRows.forEach(r => {
+        const v = Number(r[primary]);
+        if(!isNaN(v) && (best === null || v > best.v)) best = { v, name: r[getNameCol()] };
+      });
+      if(best) addKPI('Melhor em ' + primary, formatNum(best.v), String(best.name), 'good');
+
+      const belowAvg = vals.filter(v => v < avg).length;
+      addKPI('Abaixo da média em ' + primary, belowAvg, 'de ' + vals.length + ' colaboradores', belowAvg > vals.length/2 ? 'bad' : '');
+    }
+
+    function addKPI(label, value, sub, cls){
+      const div = document.createElement('div');
+      div.className = 'kpi';
+      div.innerHTML = `<div class="label">${label}</div><div class="value ${cls||''}">${value}</div><div class="sub">${sub||''}</div>`;
+      strip.appendChild(div);
+    }
+  }
+
+  function formatNum(n){
+    if(Number.isInteger(n)) return n.toString();
+    return n.toFixed(2);
+  }
+
+  function renderTable(){
+    const nameCol = getNameCol();
+    const groupCol = getGroupCol();
+    const metrics = getMetrics();
+    const search = el('searchBox').value.toLowerCase();
+
+    const head = el('tableHead');
+    head.innerHTML = '';
+    const cols = [nameCol, ...(groupCol ? [groupCol] : []), ...metrics];
+    cols.forEach(c => {
+      const th = document.createElement('th');
+      th.textContent = c;
+      if(sortState.col === c) th.classList.add('active');
+      th.addEventListener('click', () => {
+        sortState.dir = (sortState.col === c) ? -sortState.dir : 1;
+        sortState.col = c;
+        renderTable();
+      });
+      head.appendChild(th);
+    });
+
+    let rows = rawRows.filter(r => {
+      if(!search) return true;
+      const hay = (String(r[nameCol]||'') + ' ' + String(groupCol ? r[groupCol] : '')).toLowerCase();
+      return hay.includes(search);
+    });
+
+    if(sortState.col){
+      rows = rows.slice().sort((a,b) => {
+        let va = a[sortState.col], vb = b[sortState.col];
+        if(typeof va === 'string') va = va.toLowerCase();
+        if(typeof vb === 'string') vb = vb.toLowerCase();
+        if(va < vb) return -1*sortState.dir;
+        if(va > vb) return 1*sortState.dir;
+        return 0;
+      });
+    }
+
+    const avgByMetric = {};
+    metrics.forEach(m => {
+      const vals = rawRows.map(r => Number(r[m])).filter(v => !isNaN(v));
+      avgByMetric[m] = vals.reduce((a,b)=>a+b,0) / (vals.length||1);
+    });
+
+    const body = el('tableBody');
+    body.innerHTML = '';
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      let html = `<td class="name-cell">${r[nameCol] ?? ''}</td>`;
+      if(groupCol) html += `<td>${r[groupCol] ?? ''}</td>`;
+      metrics.forEach(m => {
+        const v = Number(r[m]);
+        const cls = !isNaN(v) && avgByMetric[m] ? (v >= avgByMetric[m] ? 'good' : 'bad') : '';
+        html += `<td><span class="badge ${cls}">${r[m] ?? ''}</span></td>`;
+      });
+      tr.innerHTML = html;
+      body.appendChild(tr);
+    });
+  }
+
+  function renderRankMetricOptions(){
+    fillSelect('rankMetricSelect', getMetrics().length ? getMetrics() : numericCols);
+  }
+
+  function renderRankChart(){
+    const metric = el('rankMetricSelect').value;
+    const nameCol = getNameCol();
+    if(!metric) return;
+
+    const data = rawRows
+      .map(r => ({ name: String(r[nameCol] ?? ''), value: Number(r[metric]) }))
+      .filter(d => !isNaN(d.value))
+      .sort((a,b) => b.value - a.value)
+      .slice(0, 15);
+
+    const ctx = el('rankChart').getContext('2d');
+    if(rankChart) rankChart.destroy();
+    rankChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: data.map(d => d.name),
+        datasets: [{
+          label: metric,
+          data: data.map(d => d.value),
+          backgroundColor: '#4FD1C5',
+          borderRadius: 2,
+          maxBarThickness: 22
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: '#2A3338' }, ticks: { color: '#8A969C', font: { family: 'IBM Plex Mono', size: 11 } } },
+          y: { grid: { display: false }, ticks: { color: '#E7ECEE', font: { size: 11 } } }
+        }
+      }
+    });
+  }
+
+  function renderTrend(){
+    const periodCol = getPeriodCol();
+    const metrics = getMetrics();
+    const panel = el('trendPanel');
+    if(!periodCol || !metrics.length){
+      panel.style.display = 'none';
+      return;
+    }
+    panel.style.display = 'block';
+    const metric = metrics[0];
+
+    const groups = {};
+    rawRows.forEach(r => {
+      const p = String(r[periodCol] ?? '');
+      const v = Number(r[metric]);
+      if(!p || isNaN(v)) return;
+      groups[p] = groups[p] || [];
+      groups[p].push(v);
+    });
+    const labels = Object.keys(groups).sort();
+    const values = labels.map(l => {
+      const arr = groups[l];
+      return arr.reduce((a,b)=>a+b,0) / arr.length;
+    });
+
+    const ctx = el('trendChart').getContext('2d');
+    if(trendChart) trendChart.destroy();
+    trendChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Média — ' + metric,
+          data: values,
+          borderColor: '#B4E33D',
+          backgroundColor: 'rgba(180,227,61,0.12)',
+          fill: true,
+          tension: 0.25,
+          pointRadius: 3
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display:false }, ticks: { color: '#8A969C', font: { size: 11 } } },
+          y: { grid: { color: '#2A3338' }, ticks: { color: '#8A969C', font: { family:'IBM Plex Mono', size: 11 } } }
+        }
+      }
+    });
+  }
+})();
+</script>
+</body>
+</html>
